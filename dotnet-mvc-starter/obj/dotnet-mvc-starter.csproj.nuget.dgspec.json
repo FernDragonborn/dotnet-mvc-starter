@@ -50,7 +50,7 @@
             },
             "BCrypt.Net-Next": {
               "target": "Package",
-              "version": "[4.1.0, )"
+              "version": "[4.2.1, )"
             },
             "FluentValidation": {
               "target": "Package",
@@ -70,43 +70,43 @@
             },
             "Microsoft.AspNetCore.Authentication.JwtBearer": {
               "target": "Package",
-              "version": "[10.0.6, )"
+              "version": "[10.0.8, )"
             },
             "Microsoft.AspNetCore.Mvc.NewtonsoftJson": {
               "target": "Package",
-              "version": "[10.0.6, )"
+              "version": "[10.0.8, )"
             },
             "Microsoft.EntityFrameworkCore": {
               "target": "Package",
-              "version": "[10.0.6, )"
+              "version": "[10.0.8, )"
             },
             "Microsoft.EntityFrameworkCore.Analyzers": {
               "target": "Package",
-              "version": "[10.0.6, )"
+              "version": "[10.0.8, )"
             },
             "Microsoft.EntityFrameworkCore.Design": {
               "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",
               "suppressParent": "All",
               "target": "Package",
-              "version": "[10.0.6, )"
+              "version": "[10.0.8, )"
             },
             "Microsoft.EntityFrameworkCore.Proxies": {
               "target": "Package",
-              "version": "[10.0.6, )"
+              "version": "[10.0.8, )"
             },
             "Microsoft.EntityFrameworkCore.Relational": {
               "target": "Package",
-              "version": "[10.0.6, )"
+              "version": "[10.0.8, )"
             },
             "Microsoft.EntityFrameworkCore.Tools": {
               "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",
               "suppressParent": "All",
               "target": "Package",
-              "version": "[10.0.6, )"
+              "version": "[10.0.8, )"
             },
             "Microsoft.IdentityModel.Tokens": {
               "target": "Package",
-              "version": "[8.17.0, )"
+              "version": "[8.18.0, )"
             },
             "Newtonsoft.Json": {
               "target": "Package",
@@ -116,23 +116,15 @@
               "target": "Package",
               "version": "[10.0.1, )"
             },
-            "Reqnroll.Tools.MsBuild.Generation": {
-              "target": "Package",
-              "version": "[3.3.3, )"
-            },
-            "Reqnroll.xUnit": {
-              "target": "Package",
-              "version": "[3.3.3, )"
-            },
             "Serilog.AspNetCore": {
               "target": "Package",
-              "version": "[9.0.0, )"
+              "version": "[10.0.0, )"
             },
             "SonarAnalyzer.CSharp": {
               "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",
               "suppressParent": "All",
               "target": "Package",
-              "version": "[10.23.0.137933, )"
+              "version": "[10.26.0.140279, )"
             },
             "Swashbuckle.AspNetCore": {
               "target": "Package",
@@ -141,10 +133,6 @@
             "Swashbuckle.AspNetCore.Filters": {
               "target": "Package",
               "version": "[10.0.1, )"
-            },
-            "Xunit.SkippableFact": {
-              "target": "Package",
-              "version": "[1.5.61, )"
             },
             "dotenv.net": {
               "target": "Package",

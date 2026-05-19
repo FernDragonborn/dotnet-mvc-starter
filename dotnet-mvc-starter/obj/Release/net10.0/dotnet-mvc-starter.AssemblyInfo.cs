@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("dotnet-mvc-starter")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fb82f42a30caa3a7cb1ab1ee989b0b985438e7fa")]
 [assembly: System.Reflection.AssemblyProductAttribute("dotnet-mvc-starter")]
 [assembly: System.Reflection.AssemblyTitleAttribute("dotnet-mvc-starter")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
