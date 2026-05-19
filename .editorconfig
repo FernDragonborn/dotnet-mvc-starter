@@ -1,0 +1,34 @@
+
+[*]
+
+# Microsoft .NET properties
+csharp_new_line_before_members_in_object_initializers = false
+csharp_preferred_modifier_order = protected, internal, private, public, file, new, sealed, virtual, abstract, override, static, async, extern, unsafe, volatile, readonly, required:suggestion
+csharp_preserve_single_line_blocks = true
+
+# ReSharper properties
+resharper_blank_lines_after_block_statements = 0
+resharper_braces_for_ifelse = required_for_multiline
+resharper_braces_redundant = false
+resharper_csharp_blank_lines_around_invocable = 0
+resharper_csharp_indent_style = tab
+resharper_csharp_keep_existing_enum_arrangement = false
+resharper_csharp_max_line_length = 149
+resharper_csharp_remove_blank_lines_near_braces_in_code = false
+resharper_csharp_remove_blank_lines_near_braces_in_declarations = false
+resharper_csharp_wrap_ternary_expr_style = chop_always
+resharper_instance_members_qualify_declared_in = 
+resharper_keep_existing_attribute_arrangement = true
+resharper_keep_existing_declaration_block_arrangement = false
+resharper_parentheses_redundancy_style = remove
+resharper_place_accessorholder_attribute_on_same_line = false
+resharper_place_expr_property_on_single_line = true
+resharper_place_simple_embedded_statement_on_same_line = false
+resharper_place_simple_initializer_on_single_line = false
+resharper_wrap_array_initializer_style = chop_always
+resharper_wrap_object_and_collection_initializer_style = chop_always
+
+[*.cs]
+indent_style = tab
+indent_size = tab
+tab_width = 4

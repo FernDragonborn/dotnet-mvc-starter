@@ -1,0 +1,8 @@
+﻿FROM mcr.microsoft.com/dotnet/sdk:10.0
+WORKDIR /app
+EXPOSE 8080
+
+COPY ["dotnet-mvc-starter.csproj", "."]
+RUN dotnet restore "dotnet-mvc-starter.csproj"
+
+COPY . .
