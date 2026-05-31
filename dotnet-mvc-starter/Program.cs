@@ -21,7 +21,7 @@ public static class Program
 		CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 		CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
 
-		IdentityModelEventSource.ShowPII = true;
+		IdentityModelEventSource.ShowPII = false;
 
 		Configure.AddUkrainianLanguageSupport();
 
@@ -43,6 +43,8 @@ public static class Program
 			.CreateLogger();
 
 		var builder = WebApplication.CreateBuilder(args);
+
+		Configure.ValidateProductionSecrets(builder);
 
 		builder.Host.UseSerilog();
 
@@ -89,6 +91,9 @@ public static class Program
 		if (app.Environment.IsDevelopment()) IdentityModelEventSource.ShowPII = true;
 
 		app.UseHttpsRedirection();
+
+		if (!app.Environment.IsDevelopment())
+			app.UseMiddleware<SecurityHeadersMiddleware>();
 
 		app.UseRouting();
 		app.UseCors("DefaultCors");

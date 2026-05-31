@@ -30,11 +30,10 @@ public abstract record RequestTypes
 	public record RenewTokenRequest(string RefreshToken);
 
 	public record UpdateUserRequest(
-		string Role,
-		string? CurrentEmail,
+		string? Username,
 		string? Email,
-		string? ProfilePic,
-		string? Nickname
+		string? DisplayName,
+		Gender? Gender
 	);
 	
 	public class UserFilterDto

@@ -20,7 +20,7 @@ public interface IUserService
 
 	Task<Result> DeleteAvatarAsync(Guid userId);
 
-	Task<Result> UpdateUserAsync(UserDto userDto, string? currentPrincipalEmail, bool isAdmin);
+	Task<Result> UpdateUserAsync(UpdateUserRequest request, string? currentUsername, bool isAdmin);
 	
 	Task<Result> UpdateUserRoleAsync(UpdateRoleRequest updateRoleRequest, string changerEmail);
 

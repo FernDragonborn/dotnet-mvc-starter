@@ -195,55 +195,45 @@ public class UserService(IUnitOfWork unitOfWork, IMapper mapper, IFileStorage fi
 		};
 	}
 
-	public async Task<Result> UpdateUserAsync(UserDto userDto, string? currentPrincipalEmail, bool isAdmin)
+	public async Task<Result> UpdateUserAsync(UpdateUserRequest request, string? currentUsername, bool isAdmin)
 	{
-		// Look up by current JWT identity (username stored in ClaimTypes.Name), not the submitted username.
-		// This allows username changes — the old name is used to find the record.
-		var userFetchRes = await unitOfWork.UserRepository.GetOneAsync(u => u.Username == currentPrincipalEmail);
+		var userFetchRes = await unitOfWork.UserRepository.GetOneAsync(u => u.Username == currentUsername);
 		if (userFetchRes.IsFailure)
 		{
-			// Admin path: fall back to submitted username if JWT identity not found
 			if (!isAdmin)
-				return Result.Fail($"User \'{currentPrincipalEmail}\' was not found.");
-			userFetchRes = await unitOfWork.UserRepository.GetOneAsync(u => u.Username == userDto.Username);
+				return Result.Fail($"User '{currentUsername}' was not found.");
+			if (string.IsNullOrWhiteSpace(request.Username))
+				return Result.Fail("Username is required to locate target user.");
+			userFetchRes = await unitOfWork.UserRepository.GetOneAsync(u => u.Username == request.Username);
 			if (userFetchRes.IsFailure)
-				return Result.Fail($"User \'{userDto.Username}\' was not found.");
+				return Result.Fail($"User '{request.Username}' was not found.");
 		}
 
-		var isNotSameUser = currentPrincipalEmail != userFetchRes.Value.Username;
+		var isNotSameUser = currentUsername != userFetchRes.Value.Username;
 		if (isNotSameUser && !isAdmin)
 			return Result.Fail("Insufficient permissions to edit this profile.");
 
-		if (userFetchRes.Value.Role != userDto.Role)
-			return Result.Fail("Role change is not allowed via this endpoint.");
-
-		// Check email uniqueness if it is being changed
-		if (!string.IsNullOrWhiteSpace(userDto.Email) &&
-		    !string.Equals(userDto.Email, userFetchRes.Value.Email, StringComparison.OrdinalIgnoreCase))
+		if (!string.IsNullOrWhiteSpace(request.Email) &&
+		    !string.Equals(request.Email, userFetchRes.Value.Email, StringComparison.OrdinalIgnoreCase))
 		{
-			var emailTaken = await unitOfWork.UserRepository.GetOneAsync(u => u.Email == userDto.Email);
+			var emailTaken = await unitOfWork.UserRepository.GetOneAsync(u => u.Email == request.Email);
 			if (emailTaken.IsSuccess)
 				return Result.Fail("This email is already in use.");
 		}
 
-		// Check username uniqueness if it is being changed
-		if (!string.IsNullOrWhiteSpace(userDto.Username) &&
-		    !string.Equals(userDto.Username, userFetchRes.Value.Username, StringComparison.OrdinalIgnoreCase))
+		if (!string.IsNullOrWhiteSpace(request.Username) &&
+		    !string.Equals(request.Username, userFetchRes.Value.Username, StringComparison.OrdinalIgnoreCase))
 		{
-			var usernameTaken = await unitOfWork.UserRepository.GetOneAsync(u => u.Username == userDto.Username);
+			var usernameTaken = await unitOfWork.UserRepository.GetOneAsync(u => u.Username == request.Username);
 			if (usernameTaken.IsSuccess)
 				return Result.Fail("This username is already taken.");
 		}
 
 		var userToUpdate = userFetchRes.Value;
-		var savedHash = userToUpdate.PasswordHash;
-		var savedSalt = userToUpdate.PasswordSalt;
-
-		mapper.Map(userDto, userToUpdate);
-
-		// Password hash/salt must never be overwritten via profile update
-		userToUpdate.PasswordHash = savedHash;
-		userToUpdate.PasswordSalt = savedSalt;
+		if (!string.IsNullOrWhiteSpace(request.Username)) userToUpdate.Username = request.Username;
+		if (!string.IsNullOrWhiteSpace(request.Email)) userToUpdate.Email = request.Email;
+		if (request.DisplayName is not null) userToUpdate.DisplayName = request.DisplayName;
+		if (request.Gender.HasValue) userToUpdate.Gender = request.Gender.Value;
 
 		await unitOfWork.UserRepository.Update(userToUpdate);
 		return Result.Ok();

@@ -6,6 +6,6 @@ public class MappingProfile : Profile
 {
 	public MappingProfile()
 	{
-		CreateMap<User, UserDto>().ReverseMap().MaxDepth(1);
+		CreateMap<User, UserDto>().MaxDepth(1);
 	}
 }

@@ -61,6 +61,30 @@ public class LocalFileStorage : IFileStorage
         if (string.IsNullOrWhiteSpace(key))
             return Result.Fail<string>("Storage key cannot be empty.");
 
+        // Reject control chars (incl. NUL byte injection)
+        foreach (var ch in key)
+        {
+            if (char.IsControl(ch))
+                return Result.Fail<string>("Storage key contains control characters.");
+        }
+
+        // Reject backslashes (Windows separator — keys are POSIX-style)
+        if (key.Contains('\\'))
+            return Result.Fail<string>("Storage key must not contain backslashes.");
+
+        // Reject absolute paths / drive letters / UNC
+        if (Path.IsPathRooted(key) || key.StartsWith('/') || key.StartsWith('~'))
+            return Result.Fail<string>("Storage key must be relative.");
+
+        // Reject any '.' or '..' segment (also handles encoded variants because routing decodes %2E before us)
+        var segments = key.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        foreach (var seg in segments)
+        {
+            if (seg is "." or "..")
+                return Result.Fail<string>("Storage key must not contain '.' or '..' segments.");
+        }
+
+        // Final defense in depth: resolve and ensure result stays under root
         var combined = Path.GetFullPath(Path.Combine(_root, key));
         var rootWithSep = _root.EndsWith(Path.DirectorySeparatorChar) ? _root : _root + Path.DirectorySeparatorChar;
 

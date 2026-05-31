@@ -33,6 +33,23 @@ internal static class Configure
         Console.InputEncoding = Encoding.GetEncoding(1251);
     }
 
+    internal static void ValidateProductionSecrets(WebApplicationBuilder builder)
+    {
+        if (!builder.Environment.IsProduction()) return;
+
+        var key = TryEnv("JWT_PRIVATE_KEY") ?? "";
+        if (key.Length < 32)
+            throw new InvalidOperationException(
+                "JWT_PRIVATE_KEY must be at least 32 characters in Production.");
+        if (key.Contains("please_change_me", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("CHANGE_ME", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "JWT_PRIVATE_KEY is set to the default placeholder. Replace it before deploying to Production.");
+
+        if (string.IsNullOrWhiteSpace(TryEnv("JWT_AUDIENCE")) || string.IsNullOrWhiteSpace(TryEnv("JWT_ISSUER")))
+            throw new InvalidOperationException("JWT_AUDIENCE and JWT_ISSUER are required in Production.");
+    }
+
     internal static void AddCors(WebApplicationBuilder builder)
     {
         builder.Services.AddCors(options =>
@@ -120,11 +137,10 @@ internal static class Configure
         });
         builder.Services.AddHttpLogging(logging =>
         {
-            logging.LoggingFields = HttpLoggingFields.Request | HttpLoggingFields.ResponseHeaders;
-            logging.MediaTypeOptions.AddText("application/javascript");
-            logging.RequestBodyLogLimit = 4096;
-            logging.ResponseBodyLogLimit = 4096;
-            logging.CombineLogs = true;
+            logging.LoggingFields = HttpLoggingFields.RequestPath
+                                    | HttpLoggingFields.RequestMethod
+                                    | HttpLoggingFields.RequestQuery
+                                    | HttpLoggingFields.ResponseStatusCode;
         });
     }
 
@@ -317,9 +333,18 @@ internal static class Configure
 	    var db = scope.ServiceProvider.GetRequiredService<MyDbContext>();
 
 	    logger.LogInformation("Database check: connecting to {Provider}...", db.Database.ProviderName);
-	    var created = db.Database.EnsureCreated();
-	    logger.LogInformation(created
-		    ? "Database created and schema applied"
-		    : "Database already exists, schema unchanged");
+
+	    if (app.Environment.IsProduction())
+	    {
+		    db.Database.Migrate();
+		    logger.LogInformation("Production: migrations applied (if any pending)");
+	    }
+	    else
+	    {
+		    var created = db.Database.EnsureCreated();
+		    logger.LogInformation(created
+			    ? "Dev: database created and schema applied"
+			    : "Dev: database already exists, schema unchanged");
+	    }
     }
 }

@@ -11,8 +11,7 @@ public class AuthService(IUnitOfWork unitOfWork) : IAuthService
 	public virtual async Task<Result<ResponseTypes.TokensResponse>> LoginAsync(LoginRequest dto)
 	{
 		if (string.IsNullOrEmpty(dto.Password)
-		    || string.IsNullOrEmpty(dto.Email)
-		    && string.IsNullOrEmpty(dto.Username))
+		    || (string.IsNullOrEmpty(dto.Email) && string.IsNullOrEmpty(dto.Username)))
 			return Result.Fail<ResponseTypes.TokensResponse>(WrongLoginOrPasswordStr);
 
 		var userFetchRes = await unitOfWork.UserRepository.GetOneAsync(x => x.Email.Equals(dto.Email) || x.Username.Equals(dto.Username));

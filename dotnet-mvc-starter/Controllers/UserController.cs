@@ -102,7 +102,7 @@ public class UserController(IUserService userService, IAuthService authService) 
 	/// <returns>The image file stream (image/jpeg, image/png, etc.).</returns>
 	/// <response code="200">Image found and returned.</response>
 	/// <response code="404">Image file not found on server.</response>
-	[HttpGet("avatar/{fileName}")]
+	[HttpGet("avatar/{**fileName}")]
 	[ProducesResponseType(StatusCodes.Status200OK)]
 	[ProducesResponseType(typeof(object), StatusCodes.Status404NotFound)]
 	public async Task<IActionResult> GetAvatar(string fileName)
@@ -186,12 +186,12 @@ public class UserController(IUserService userService, IAuthService authService) 
 	[Authorize]
 	[ProducesResponseType(StatusCodes.Status204NoContent)]
 	[ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
-	public async Task<IActionResult> UpdateUser([FromBody] UserDto userDto)
+	public async Task<IActionResult> UpdateUser([FromBody] UpdateUserRequest request)
 	{
-		var currentEmail = User.Identity?.Name;
+		var currentUsername = User.Identity?.Name;
 		var isAdmin = User.IsInRole(IdentityData.ClaimAdmin.ToString());
 
-		var result = await userService.UpdateUserAsync(userDto, currentEmail, isAdmin);
+		var result = await userService.UpdateUserAsync(request, currentUsername, isAdmin);
 
 		if (result.IsFailure)
 			return BadRequest(new { error = result.Error });

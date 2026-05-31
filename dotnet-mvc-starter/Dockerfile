@@ -46,4 +46,7 @@ ENV DOTNET_gcServer=1
 
 EXPOSE 8080
 
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health/live || exit 1
+
 ENTRYPOINT ["/bin/sh", "/entrypoint.sh"]
