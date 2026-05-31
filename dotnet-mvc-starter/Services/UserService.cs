@@ -3,19 +3,20 @@ using System.Linq.Expressions;
 using System.Security.Cryptography;
 using api.Identity;
 using api.Services.IServices;
+using api.Services.Storage;
 using api.Utils;
 using AutoMapper;
-using dotenv.net;
 using static api.DTOs.ResponseTypes;
 
 // ReSharper disable ClassWithVirtualMembersNeverInherited.Global
 
 namespace api.Services;
 
-public class UserService(IUnitOfWork unitOfWork, IMapper mapper) : IUserService
+public class UserService(IUnitOfWork unitOfWork, IMapper mapper, IFileStorage fileStorage) : IUserService
 {
 	private const string PasswordSymbols = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-	private readonly IDictionary<string, string> _env = DotEnv.Read();
+	private const long MaxAvatarBytes = 5 * 1024 * 1024;
+	private static readonly string[] AllowedAvatarExtensions = [".jpg", ".jpeg", ".png", ".webp"];
 
 	public virtual async Task<Result> RegisterUserAsync(RegisterRequest dto)
 	{
@@ -29,11 +30,11 @@ public class UserService(IUnitOfWork unitOfWork, IMapper mapper) : IUserService
 
 		var userFetchRes = await unitOfWork.UserRepository.GetOneAsync(x => x.Email == dto.Email);
 		if (userFetchRes.IsSuccess)
-			return Result.Fail<TokensResponse>("Ця email-адреса вже зайнята");
+			return Result.Fail<TokensResponse>("This email is already taken.");
 
 		var usernameFetchRes = await unitOfWork.UserRepository.GetOneAsync(x => x.Username == dto.Username);
 		if (usernameFetchRes.IsSuccess)
-			return Result.Fail<TokensResponse>("Цей нікнейм вже зайнятий");
+			return Result.Fail<TokensResponse>("This username is already taken.");
 
 		User user = new(BCrypt.Net.BCrypt.GenerateSalt())
 		{
@@ -95,62 +96,54 @@ public class UserService(IUnitOfWork unitOfWork, IMapper mapper) : IUserService
 		return Result.Ok(resultDto);
 	}
 
-	public async Task<Result> RedactProfilePictureAsync(ProfilePictureDto pictureDto)
+	public async Task<Result> RedactProfilePictureAsync(Guid userId, IFormFile file)
 	{
-		if (pictureDto.ProfilePic is null)
-			return Result.Fail("File for ProfilePic cannot be null");
-
-		var userFetchRes = await unitOfWork.UserRepository.GetOneAsync(u => u.Email == pictureDto.Email);
-		if (userFetchRes.IsFailure)
-			return Result.Fail($"User {pictureDto.Email} was not found");
-
-		// Генеруємо шлях тут або використовуємо той самий Utils клас
-		var path = StaticDetails.GetUserProfileImagePath(userFetchRes.Value.Id);
-
-		// Викликаємо внутрішній метод збереження
-		return await SaveAvatarAsync(pictureDto.ProfilePic, userFetchRes.Value.Id, path);
+		var saveRes = await SaveAvatarAsync(file, userId);
+		return saveRes.IsFailure ? Result.Fail(saveRes.Error) : Result.Ok();
 	}
 
-	public virtual async Task<Result<string>> SaveAvatarAsync(IFormFile file, Guid userGuidId, string fileStoragePath)
+	public virtual async Task<Result<string>> SaveAvatarAsync(IFormFile file, Guid userGuidId)
 	{
-		if (string.IsNullOrEmpty(fileStoragePath)) return Result.Fail<string>("File storage path is not set.");
+		if (file is null || file.Length == 0) return Result.Fail<string>("File for ProfilePic cannot be empty");
+		if (file.Length > MaxAvatarBytes) return Result.Fail<string>("File too large. Max 5 MB.");
 
-		// Ця перевірка трохи надлишкова, якщо ми викликаємо з RedactProfilePictureAsync, але не завадить
-		var userFetchRes = await unitOfWork.UserRepository.GetAsync(u => u.Id == userGuidId);
+		var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+		if (!AllowedAvatarExtensions.Contains(extension))
+			return Result.Fail<string>("Invalid file type. Allowed: jpg, jpeg, png, webp.");
+
+		var userFetchRes = await unitOfWork.UserRepository.GetOneAsync(u => u.Id == userGuidId);
 		if (userFetchRes.IsFailure) return Result.Fail<string>("User not found.");
 
-		var uploadPath = Path.Combine(Directory.GetCurrentDirectory(), fileStoragePath);
+		await using var inputStream = file.OpenReadStream();
+		if (!await IsValidImageMagicBytesAsync(inputStream, extension))
+			return Result.Fail<string>("File content does not match expected image format.");
+		inputStream.Position = 0;
 
-		if (!Directory.Exists(uploadPath))
-			Directory.CreateDirectory(uploadPath);
-
-		string[] allowedExtensions = [".jpg", ".jpeg", ".png"];
-		var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-
-		if (!allowedExtensions.Contains(extension)) return Result.Fail<string>("Invalid file type.");
-
-		var fileName = Guid.NewGuid() + extension;
-		var filePath = Path.Combine(uploadPath, fileName);
-
-		await using (var stream = new FileStream(filePath, FileMode.Create))
+		// Remove old avatars first to avoid orphan files/rows
+		var existingRes = await unitOfWork.UserImageRepository.GetAsync(img => img.UserId == userGuidId);
+		if (existingRes.IsSuccess)
 		{
-			await file.CopyToAsync(stream);
+			foreach (var old in existingRes.Value)
+			{
+				await fileStorage.DeleteAsync(old.FileName);
+				await unitOfWork.UserImageRepository.Remove(old);
+			}
 		}
 
-		var userImage = new UserImage(userGuidId, fileName, DateTime.UtcNow);
+		var key = $"avatars/{userGuidId}/{Guid.NewGuid()}{extension}";
+		var contentType = ContentTypeFromExtension(extension);
 
+		var saveRes = await fileStorage.SaveAsync(key, inputStream, contentType);
+		if (saveRes.IsFailure) return Result.Fail<string>(saveRes.Error);
+
+		var userImage = new UserImage(userGuidId, key, DateTime.UtcNow);
 		var entityRes = await unitOfWork.UserImageRepository.AddAsync(userImage);
 		if (entityRes.IsFailure) return Result.Fail<string>(entityRes.Error);
 
-		// Update user's profile pic URL
-		var userForPicUpdate = await unitOfWork.UserRepository.GetOneAsync(u => u.Id == userGuidId);
-		if (userForPicUpdate.IsSuccess)
-		{
-			userForPicUpdate.Value.ProfilePicUrl = fileName;
-			await unitOfWork.UserRepository.Update(userForPicUpdate.Value);
-		}
+		userFetchRes.Value.ProfilePicUrl = key;
+		await unitOfWork.UserRepository.Update(userFetchRes.Value);
 
-		return Result.Ok(entityRes.Value.FileName);
+		return Result.Ok(key);
 	}
 
 	public async Task<Result> DeleteAvatarAsync(Guid userId)
@@ -163,22 +156,43 @@ public class UserService(IUnitOfWork unitOfWork, IMapper mapper) : IUserService
 		if (imageRes.IsFailure || imageRes.Value.Count == 0)
 			return Result.Fail("User does not have an avatar");
 
-		var latestImage = imageRes.Value.OrderByDescending(i => i.UploadedAt).First();
+		foreach (var img in imageRes.Value)
+		{
+			await fileStorage.DeleteAsync(img.FileName);
+			await unitOfWork.UserImageRepository.Remove(img);
+		}
 
-		// Delete file from disk
-		var filePath = Path.Combine(Directory.GetCurrentDirectory(), StaticDetails.UserProfileImagePath, latestImage.FileName);
-		if (File.Exists(filePath))
-			File.Delete(filePath);
-
-		// Remove DB record
-		await unitOfWork.UserImageRepository.Remove(latestImage);
-
-		// Clear profile pic URL
 		var user = userFetchRes.Value;
 		user.ProfilePicUrl = null;
 		await unitOfWork.UserRepository.Update(user);
 
 		return Result.Ok();
+	}
+
+	private static string ContentTypeFromExtension(string ext) => ext switch
+	{
+		".jpg" or ".jpeg" => "image/jpeg",
+		".png" => "image/png",
+		".webp" => "image/webp",
+		_ => "application/octet-stream"
+	};
+
+	private static async Task<bool> IsValidImageMagicBytesAsync(Stream stream, string ext)
+	{
+		var header = new byte[12];
+		var read = await stream.ReadAsync(header.AsMemory(0, header.Length));
+		if (read < 4) return false;
+
+		return ext switch
+		{
+			".jpg" or ".jpeg" => header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF,
+			".png" => header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47
+			          && header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A,
+			".webp" => read >= 12
+			           && header[0] == 0x52 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x46
+			           && header[8] == 0x57 && header[9] == 0x45 && header[10] == 0x42 && header[11] == 0x50,
+			_ => false
+		};
 	}
 
 	public async Task<Result> UpdateUserAsync(UserDto userDto, string? currentPrincipalEmail, bool isAdmin)
@@ -198,10 +212,10 @@ public class UserService(IUnitOfWork unitOfWork, IMapper mapper) : IUserService
 
 		var isNotSameUser = currentPrincipalEmail != userFetchRes.Value.Username;
 		if (isNotSameUser && !isAdmin)
-			return Result.Fail("Недостатньо прав для редагування цього профілю.");
+			return Result.Fail("Insufficient permissions to edit this profile.");
 
 		if (userFetchRes.Value.Role != userDto.Role)
-			return Result.Fail("Зміна ролі неможлива через цей маршрут.");
+			return Result.Fail("Role change is not allowed via this endpoint.");
 
 		// Check email uniqueness if it is being changed
 		if (!string.IsNullOrWhiteSpace(userDto.Email) &&
@@ -209,7 +223,7 @@ public class UserService(IUnitOfWork unitOfWork, IMapper mapper) : IUserService
 		{
 			var emailTaken = await unitOfWork.UserRepository.GetOneAsync(u => u.Email == userDto.Email);
 			if (emailTaken.IsSuccess)
-				return Result.Fail("Цей email вже використовується.");
+				return Result.Fail("This email is already in use.");
 		}
 
 		// Check username uniqueness if it is being changed
@@ -218,7 +232,7 @@ public class UserService(IUnitOfWork unitOfWork, IMapper mapper) : IUserService
 		{
 			var usernameTaken = await unitOfWork.UserRepository.GetOneAsync(u => u.Username == userDto.Username);
 			if (usernameTaken.IsSuccess)
-				return Result.Fail("Цей нікнейм вже зайнятий.");
+				return Result.Fail("This username is already taken.");
 		}
 
 		var userToUpdate = userFetchRes.Value;
@@ -270,43 +284,24 @@ public class UserService(IUnitOfWork unitOfWork, IMapper mapper) : IUserService
 		return Result.Ok();
 	}
 	
-	/// <returns>response dto with JWT pair</returns>
-	public virtual async Task<Result<UserFileResponse>> GetAvatarAsync(string fileName)
+	public virtual async Task<Result<UserFileResponse>> GetAvatarAsync(string key)
 	{
-		if (string.IsNullOrWhiteSpace(fileName))
-			return Result.Fail<UserFileResponse>("Ім'я файлу не може бути порожнім.");
+		if (string.IsNullOrWhiteSpace(key))
+			return Result.Fail<UserFileResponse>("File name cannot be empty.");
 
-		string[] allowedExtensions = [".jpg", ".jpeg", ".png"];
-		var extension = Path.GetExtension(fileName).ToLowerInvariant();
-
-		var notAllowedExtension = !allowedExtensions.Contains(extension);
-		if (notAllowedExtension)
+		var extension = Path.GetExtension(key).ToLowerInvariant();
+		if (!AllowedAvatarExtensions.Contains(extension))
 			return Result.Fail<UserFileResponse>("Invalid file type.");
 
-		// Запобігання атакам шляхового обходу
-		if (fileName.Contains(".."))
-			return Result.Fail<UserFileResponse>("Невірний формат імені файлу.");
+		var fetchRes = await fileStorage.GetAsync(key);
+		if (fetchRes.IsFailure)
+			return Result.Fail<UserFileResponse>(fetchRes.Error);
 
-		var filePath = Path.Combine(_env["FILE_STORAGE_PATH"], fileName);
+		await using var stream = fetchRes.Value.Content;
+		using var ms = new MemoryStream();
+		await stream.CopyToAsync(ms);
 
-		if (!File.Exists(filePath))
-			return Result.Fail<UserFileResponse>("Файл не знайдено.");
-
-		// Визначаємо MIME-тип файлу
-		var extension1 = Path.GetExtension(filePath).ToLowerInvariant();
-		var contentType = extension1 switch
-		{
-			".jpg" or ".jpeg" => "image/jpeg",
-			".png" => "image/png",
-			".gif" => "image/gif",
-			".bmp" => "image/bmp",
-			".webp" => "image/webp",
-			_ => "application/octet-stream",
-		};
-
-		var bytes = await File.ReadAllBytesAsync(filePath);
-
-		return Result.Ok(new UserFileResponse(bytes, contentType));
+		return Result.Ok(new UserFileResponse(ms.ToArray(), fetchRes.Value.ContentType));
 	}
 
 	public virtual async Task<Result<string>> ResetPasswordAsync(string userId)
@@ -338,7 +333,7 @@ public class UserService(IUnitOfWork unitOfWork, IMapper mapper) : IUserService
 		var userFetchRes = await unitOfWork.UserRepository.GetOneAsync(u => u.Id == guid);
 		if (userFetchRes.IsFailure) return Result.Fail($"User with ID \"{id}\" doesn't exist");
 		if (AuthService.NotCorrectPassword(userFetchRes.Value, currentPassword))
-			return Result.Fail("Невірний поточний пароль.");
+			return Result.Fail("Current password is incorrect.");
 
 		userFetchRes.Value.PasswordSalt = BCrypt.Net.BCrypt.GenerateSalt();
 		userFetchRes.Value.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword, userFetchRes.Value.PasswordSalt);

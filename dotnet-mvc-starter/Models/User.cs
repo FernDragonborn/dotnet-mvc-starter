@@ -25,11 +25,11 @@ public class User : BaseEntity
 
     [Required] [MaxLength(60)] public string PasswordSalt { get; set; } = string.Empty;
 
-    [Column(TypeName = "varchar(20)")]
+    [MaxLength(20)]
     [Required]
     public UserRole Role { get; set; }
 
-    [Column(TypeName = "varchar(20)")] public Gender Gender { get; set; }
+    [MaxLength(20)] public Gender Gender { get; set; }
 
     [MaxLength(120)] public string? ProfilePicUrl { get; set; } = string.Empty;
 

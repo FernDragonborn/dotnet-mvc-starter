@@ -12,11 +12,11 @@ public interface IUserService
 
 	Task<Result> DeleteAnyUserAsync(string userId);
 
-	Task<Result<string>> SaveAvatarAsync(IFormFile file, Guid userGuidId, string fileStoragePath);
+	Task<Result<string>> SaveAvatarAsync(IFormFile file, Guid userGuidId);
 
-	Task<Result<ResponseTypes.UserFileResponse>> GetAvatarAsync(string fileName);
+	Task<Result<ResponseTypes.UserFileResponse>> GetAvatarAsync(string key);
 
-	Task<Result> RedactProfilePictureAsync(ProfilePictureDto pictureDto);
+	Task<Result> RedactProfilePictureAsync(Guid userId, IFormFile file);
 
 	Task<Result> DeleteAvatarAsync(Guid userId);
 

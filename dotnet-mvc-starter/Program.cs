@@ -27,8 +27,6 @@ public static class Program
 
 		DotEnv.Load(new DotEnvOptions(false, trimValues: true));
 
-		Configure.CreateRootDirectoryIfNotExists();
-
 		// Serilog: structured logging to console + file
 		Log.Logger = new LoggerConfiguration()
 			.MinimumLevel.Information()
@@ -57,16 +55,7 @@ public static class Program
 		Configure.ConfigControllers<MyDbContext>(builder, "CONNECTION_STRING");
 		Configure.ConfigureNewtonJson();
 		
-		builder.Services.AddCors(options =>
-		{
-			options.AddPolicy("DefaultCors", policy =>
-			{
-				policy.AllowAnyHeader()
-					.AllowAnyMethod()
-					.SetIsOriginAllowed(_ => true) // Allows all origins *correctly*
-					.AllowCredentials(); // Only if you need cookies / auth
-			});
-		});
+		Configure.AddCors(builder);
 
 		Configure.AddCompression(builder, CompressionLevel.Optimal);
 
@@ -76,6 +65,8 @@ public static class Program
 		
 		builder.Services.Configure<FormOptions>(options => { options.MultipartBodyLengthLimit = 10000000; });
 		builder.Services.AddHttpClient();
+		builder.Services.AddHealthChecks();
+		Configure.AddFileStorage(builder);
 		builder.Services.AddScoped<IAuthService, AuthService>();
 		builder.Services.AddScoped<IUserService, UserService>();
 
@@ -106,6 +97,7 @@ public static class Program
 		app.UseAuthorization();
 
 		app.MapControllers();
+		app.MapHealthChecks("/health/live");
 
 		app.Run();
 	}

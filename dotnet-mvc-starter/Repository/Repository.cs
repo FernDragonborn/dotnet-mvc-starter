@@ -75,16 +75,13 @@ public class Repository<T> : IRepository<T> where T : class
 			if (filter is not null)
 				query = query.Where(filter);
 
-			// 1. Рахуємо загальну кількість ДО пагінації
 			var totalCount = await query.CountAsync();
 
-			// 2. Сортування (обов'язкове для коректної пагінації)
 			if (orderBy != null)
 				query = orderBy(query);
 			else if (typeof(BaseEntity).IsAssignableFrom(typeof(T)))
 				query = query.OrderByDescending(x => ((BaseEntity)(object)x).CreatedAt);
 
-			// 3. Пагінація
 			var items = await query
 				.Skip((pageNumber - 1) * pageSize)
 				.Take(pageSize)

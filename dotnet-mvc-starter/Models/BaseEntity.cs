@@ -1,24 +1,16 @@
 ﻿namespace api.Models;
 
 /// <summary>
-///     Базовий клас для всіх основних сутностей.
-///     EF автоматично додасть ці поля до кожної таблиці, що його успадковує.
+///     Base class for all main entities.
+///     EF will automatically add these fields to every table that inherits it.
 /// </summary>
-public abstract class BaseEntity : IComparable<User>
+public abstract class BaseEntity
 {
-
 	public Guid Id { get; set; }
 
 	public DateTime CreatedAt { get; set; }
 	public DateTime UpdatedAt { get; set; }
 
-	// Для "Soft Delete". Якщо null - запис активний. Якщо дата - видалений.
+	// Soft delete. null = active record. Date = deleted at this timestamp.
 	public DateTime? DeletedAt { get; set; }
-
-	public int CompareTo(User? other)
-	{
-		if (other is null) return 1;
-
-		return Id.CompareTo(other.Id);
-	}
 }

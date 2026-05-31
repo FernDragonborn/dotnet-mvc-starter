@@ -7,7 +7,7 @@ namespace api.Services;
 
 public class AuthService(IUnitOfWork unitOfWork) : IAuthService
 {
-	private const string WrongLoginOrPasswordStr = "Невірний нікнейм/email або пароль.";
+	private const string WrongLoginOrPasswordStr = "Invalid username/email or password.";
 	public virtual async Task<Result<ResponseTypes.TokensResponse>> LoginAsync(LoginRequest dto)
 	{
 		if (string.IsNullOrEmpty(dto.Password)

@@ -16,15 +16,15 @@ public static class ContextFactory
         if (!env.TryGetValue("CONNECTION_STRING", out var connectionString))
         {
             // This connection string used for making migrations in docker
-            connectionString = "Host=localhost;Database=dummy;Username=dummy;Password=dummy";
-            Console.WriteLine("⚠WARNING⚠: CONNECTION_STRING not found. Using gummy connecting string.");
+            connectionString = "Data Source=dummy.db";
+            Console.WriteLine("⚠WARNING⚠: CONNECTION_STRING not found. Using dummy connecting string.");
         }
-        
+
         _options ??= new DbContextOptionsBuilder<MyDbContext>()
             .UseLazyLoadingProxies()
             .EnableSensitiveDataLogging()
             .LogTo(Console.WriteLine)
-            .UseNpgsql(connectionString)
+            .UseSqlite(connectionString)
             .Options;
 
         return new MyDbContext(_options);
@@ -38,7 +38,7 @@ public class DbContextDesignTimeFactory : IDesignTimeDbContextFactory<MyDbContex
         var builder = new DbContextOptionsBuilder<MyDbContext>();
         
         // This connection string used for making migrations in docker
-        var connectionString = "Host=localhost;Database=dummy;Username=dummy;Password=dummy";
+        var connectionString = "Data Source=dummy.db";
 
         try
         {
@@ -57,7 +57,7 @@ public class DbContextDesignTimeFactory : IDesignTimeDbContextFactory<MyDbContex
             //Just ignore exceptions on docker migrations.
         }
 
-        builder.UseNpgsql(connectionString);
+        builder.UseSqlite(connectionString);
 
         return new MyDbContext(builder.Options);
     }

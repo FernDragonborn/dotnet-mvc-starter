@@ -1,0 +1,41 @@
+# Build output
+bin/
+obj/
+out/
+publish/
+
+# .NET user/secret files
+*.user
+*.suo
+*.userprefs
+*.userosscache
+*.sln.docstates
+.vs/
+
+# Rider / ReSharper
+.idea/
+*.DotSettings.user
+
+# VS Code
+.vscode/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+*.pfx
+*.key
+
+# Logs
+logs/
+*.log
+
+# Local DB / uploads
+*.db
+*.db-shm
+*.db-wal
+uploads/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,6 +1,11 @@
+using Amazon;
+using Amazon.Runtime;
+using Amazon.S3;
+using api.Services.Storage;
 using api.Utils;
 using dotenv.net;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.HttpLogging;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.ResponseCompression;
@@ -28,15 +33,79 @@ internal static class Configure
         Console.InputEncoding = Encoding.GetEncoding(1251);
     }
 
-    internal static void CreateRootDirectoryIfNotExists()
+    internal static void AddCors(WebApplicationBuilder builder)
     {
-        var uploadsPath = Path.Combine(Directory.GetCurrentDirectory(), StaticDetails.UserProfileImagePath);
-        if (!Directory.Exists(uploadsPath))
+        builder.Services.AddCors(options =>
         {
-            Directory.CreateDirectory(uploadsPath);
-            Console.WriteLine($"Created directory: {uploadsPath}");
+            options.AddPolicy("DefaultCors", policy =>
+            {
+                if (builder.Environment.IsDevelopment())
+                {
+                    policy.AllowAnyHeader()
+                        .AllowAnyMethod()
+                        .SetIsOriginAllowed(_ => true)
+                        .AllowCredentials();
+                    return;
+                }
+
+                var rawOrigins = TryEnv("ALLOWED_ORIGINS");
+                if (string.IsNullOrWhiteSpace(rawOrigins))
+                    throw new InvalidOperationException(
+                        "ALLOWED_ORIGINS is required in non-Development environments. Set comma-separated origins in .env.");
+
+                var origins = rawOrigins
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .ToArray();
+
+                policy.WithOrigins(origins)
+                    .AllowAnyHeader()
+                    .AllowAnyMethod()
+                    .AllowCredentials();
+            });
+        });
+    }
+
+    internal static void AddFileStorage(WebApplicationBuilder builder)
+    {
+        var provider = (TryEnv("STORAGE_PROVIDER") ?? "local").Trim().ToLowerInvariant();
+
+        if (provider == "s3")
+        {
+            var endpoint = TryEnv("S3_ENDPOINT");
+            var bucket = TryEnv("S3_BUCKET")
+                         ?? throw new InvalidOperationException("S3_BUCKET is required when STORAGE_PROVIDER=s3.");
+            var accessKey = TryEnv("S3_ACCESS_KEY")
+                            ?? throw new InvalidOperationException("S3_ACCESS_KEY is required when STORAGE_PROVIDER=s3.");
+            var secretKey = TryEnv("S3_SECRET_KEY")
+                            ?? throw new InvalidOperationException("S3_SECRET_KEY is required when STORAGE_PROVIDER=s3.");
+            var region = TryEnv("S3_REGION") ?? "us-east-1";
+            var forcePathStyle = string.Equals(TryEnv("S3_FORCE_PATH_STYLE"), "true", StringComparison.OrdinalIgnoreCase);
+
+            var s3Config = new AmazonS3Config
+            {
+                ForcePathStyle = forcePathStyle
+            };
+            if (!string.IsNullOrWhiteSpace(endpoint))
+                s3Config.ServiceURL = endpoint;
+            else
+                s3Config.RegionEndpoint = RegionEndpoint.GetBySystemName(region);
+
+            var creds = new BasicAWSCredentials(accessKey, secretKey);
+            var client = new AmazonS3Client(creds, s3Config);
+            builder.Services.AddSingleton<IAmazonS3>(client);
+            builder.Services.AddSingleton<IFileStorage>(_ => new S3FileStorage(client, bucket));
+        }
+        else
+        {
+            var root = TryEnv("LOCAL_STORAGE_ROOT");
+            if (string.IsNullOrWhiteSpace(root))
+                root = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+
+            builder.Services.AddSingleton<IFileStorage>(_ => new LocalFileStorage(root));
         }
     }
+
+    private static string? TryEnv(string key) => Env.TryGetValue(key, out var v) ? v : null;
 
     internal static void AddLogs(WebApplicationBuilder builder)
     {
@@ -74,10 +143,7 @@ internal static class Configure
     internal static void ConfigControllers<TContext>(WebApplicationBuilder builder, string connectionStringName)
         where TContext : Microsoft.EntityFrameworkCore.DbContext
     {
-        // Add services to the container.
-        builder.Services.AddControllers(
-                //options => { options.Filters.Add<SanitizeInputFilter>();}
-            )
+        builder.Services.AddControllers()
             .AddNewtonsoftJson(options =>
             {
                 options.SerializerSettings.ContractResolver = new DefaultContractResolver
@@ -114,7 +180,9 @@ internal static class Configure
 					"Set it as an environment variable or in appsettings.");
 			}
 
-			builder.Services.AddNpgsql<TContext>(connectionString);
+			builder.Services.AddDbContext<TContext>(opts =>
+				opts.UseSqlite(connectionString)
+					.UseLazyLoadingProxies());
     }
 
     internal static void AddIfDevelopmentSuppressModelStateInvalidFilter(WebApplicationBuilder builder)

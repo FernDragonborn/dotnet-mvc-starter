@@ -128,10 +128,16 @@ public class UserController(IUserService userService, IAuthService authService) 
 	[HttpPost("me/redactpfp")]
 	public async Task<IActionResult> RedactProfilePicture([FromForm] ProfilePictureDto pictureDto)
 	{
-		if (User.Identity?.Name != pictureDto.Email)
-			return BadRequest(new { error = "You can only update your own profile" });
+		if (pictureDto.ProfilePic is null)
+			return BadRequest(new { error = "File for ProfilePic cannot be null" });
 
-		var result = await userService.RedactProfilePictureAsync(pictureDto);
+		var userIdClaim = User.FindFirstValue("id")
+		                  ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+		if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userGuid))
+			return BadRequest(new { error = "User ID claim is missing or invalid." });
+
+		var result = await userService.RedactProfilePictureAsync(userGuid, pictureDto.ProfilePic);
 
 		if (result.IsFailure)
 			return BadRequest(new { error = result.Error });
@@ -240,7 +246,7 @@ public class UserController(IUserService userService, IAuthService authService) 
 	public async Task<IActionResult> UpdatePassword([FromBody] UpdatePasswordRequest request)
 	{
 		if (request.NewPassword != request.NewPasswordConfirmation)
-			return BadRequest(new { error = "Паролі не співпадають." });
+			return BadRequest(new { error = "Passwords do not match." });
 
 		var userId = User.FindFirstValue("id")
 		             ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -275,7 +281,7 @@ public class UserController(IUserService userService, IAuthService authService) 
 		if (result.IsFailure)
 			return BadRequest(new { error = result.Error });
 
-		// Повертаємо згенерований пароль, щоб адмін міг передати його юзеру
+		// Return generated password so admin can pass it to the user
 		return Ok(new { tempPassword = result.Value });
 	}
 	
