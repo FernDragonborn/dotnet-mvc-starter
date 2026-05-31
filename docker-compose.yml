@@ -1,0 +1,54 @@
+# Production-style stack: nginx reverse proxy + backend behind it.
+# Adjust .env in dotnet-mvc-starter/ before running.
+#
+# Quick start:
+#   docker compose up -d
+#   curl https://localhost/health/live -k
+#
+# For local TLS testing, drop self-signed certs into ./nginx/certs/ or
+# remove the SSL block from nginx/nginx.conf and listen on 80 only.
+
+services:
+  proxy:
+    image: nginx:alpine
+    container_name: starter_proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/api.conf:ro
+      - ./nginx/certs:/etc/letsencrypt:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app_net
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./dotnet-mvc-starter
+      dockerfile: Dockerfile
+    container_name: starter_backend
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+    env_file:
+      - ./dotnet-mvc-starter/.env
+    expose:
+      - "8080"
+    networks:
+      - app_net
+    volumes:
+      # SQLite database persistence — set CONNECTION_STRING="Data Source=/app/data/app.db" in .env
+      - ./data/db:/app/data
+      # Avatar uploads persistence (when STORAGE_PROVIDER=local) — set LOCAL_STORAGE_ROOT=/app/uploads
+      - ./data/uploads:/app/uploads
+    restart: unless-stopped
+
+networks:
+  app_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

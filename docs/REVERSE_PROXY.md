@@ -80,22 +80,26 @@ server {
 
 For per-user (not per-IP) limits behind shared NAT, use `$http_authorization` as the key — but it requires the JWT to be present, so combine with IP fallback.
 
-## App side (optional)
+## App side — implemented
 
-If the app needs to know the real client IP (logs, abuse tracking), enable forwarded headers in `Configure.cs`:
+Forwarded-headers wiring lives in `Configure.AddForwardedHeaders` and is registered in `Program.cs`. Behaviour:
 
-```csharp
-builder.Services.Configure<ForwardedHeadersOptions>(o =>
-{
-    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    o.KnownNetworks.Clear();
-    o.KnownProxies.Clear();
-});
-// pipeline, BEFORE UseRouting:
-app.UseForwardedHeaders();
-```
+- Disabled in Development (no proxy in dev — would only confuse).
+- Enabled in any other environment.
+- Trusts `172.20.0.0/16` (matches `docker-compose.yml` `app_net` subnet).
+- Extra CIDRs via env var `TRUSTED_PROXY_CIDRS="10.0.0.0/8,192.168.0.0/16,..."` (comma-separated).
+- `ForwardLimit = 2` — accepts at most 2 hops in `X-Forwarded-For` chain.
 
-**Caveat:** in untrusted networks, configure `KnownProxies` to the actual proxy IP, otherwise an external client can spoof `X-Forwarded-For` and bypass IP-based logic.
+`app.UseForwardedHeaders()` runs **before** `UseHttpsRedirection`/`UseRouting` so middleware downstream sees the real scheme + client IP.
+
+**Spoofing protection:** untrusted clients sending `X-Forwarded-For` are ignored. Configure `TRUSTED_PROXY_CIDRS` for Cloudflare/AWS ALB/other setups.
+
+## Reference files in this repo
+
+- `docker-compose.yml` — proxy + backend stack on `app_net` 172.20.0.0/16.
+- `nginx/nginx.conf` — full config with rate-limit zones, TLS skeleton, ACME challenge path, HSTS.
+- `dotnet-mvc-starter/Configure.cs` — `AddForwardedHeaders` helper.
+- `dotnet-mvc-starter/Program.cs` — pipeline wiring.
 
 ## Cloudflare / Traefik equivalents
 

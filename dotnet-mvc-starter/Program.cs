@@ -68,6 +68,7 @@ public static class Program
 		builder.Services.Configure<FormOptions>(options => { options.MultipartBodyLengthLimit = 10000000; });
 		builder.Services.AddHttpClient();
 		builder.Services.AddHealthChecks();
+		Configure.AddForwardedHeaders(builder);
 		Configure.AddFileStorage(builder);
 		builder.Services.AddScoped<IAuthService, AuthService>();
 		builder.Services.AddScoped<IUserService, UserService>();
@@ -89,6 +90,10 @@ public static class Program
 		Configure.IfIsDevelopmentUseSwaggerElseHsts(app);
 
 		if (app.Environment.IsDevelopment()) IdentityModelEventSource.ShowPII = true;
+
+		// MUST run before any middleware that inspects scheme or RemoteIpAddress
+		if (!app.Environment.IsDevelopment())
+			app.UseForwardedHeaders();
 
 		app.UseHttpsRedirection();
 

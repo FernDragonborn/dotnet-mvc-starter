@@ -1,3 +1,4 @@
+using System.Net;
 using Amazon;
 using Amazon.Runtime;
 using Amazon.S3;
@@ -5,7 +6,9 @@ using api.Services.Storage;
 using api.Utils;
 using dotenv.net;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using IPNetwork = Microsoft.AspNetCore.HttpOverrides.IPNetwork;
 using Microsoft.AspNetCore.HttpLogging;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.ResponseCompression;
@@ -31,6 +34,38 @@ internal static class Configure
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         Console.OutputEncoding = Encoding.GetEncoding(1251);
         Console.InputEncoding = Encoding.GetEncoding(1251);
+    }
+
+    internal static void AddForwardedHeaders(WebApplicationBuilder builder)
+    {
+        if (builder.Environment.IsDevelopment()) return;
+
+        builder.Services.Configure<ForwardedHeadersOptions>(o =>
+        {
+            o.ForwardedHeaders = ForwardedHeaders.XForwardedFor
+                               | ForwardedHeaders.XForwardedProto;
+
+            // Reject spoofed headers from outside trusted proxies
+            o.KnownNetworks.Clear();
+            o.KnownProxies.Clear();
+
+            // Trust Docker bridge network (matches docker-compose subnet 172.20.0.0/16)
+            o.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("172.20.0.0"), 16));
+
+            // Extra CIDRs from env: TRUSTED_PROXY_CIDRS="10.0.0.0/8,192.168.0.0/16"
+            var raw = TryEnv("TRUSTED_PROXY_CIDRS");
+            if (!string.IsNullOrWhiteSpace(raw))
+            {
+                foreach (var cidr in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var parts = cidr.Split('/');
+                    if (parts.Length == 2 && IPAddress.TryParse(parts[0], out var addr) && int.TryParse(parts[1], out var prefix))
+                        o.KnownNetworks.Add(new IPNetwork(addr, prefix));
+                }
+            }
+
+            o.ForwardLimit = 2;
+        });
     }
 
     internal static void ValidateProductionSecrets(WebApplicationBuilder builder)
